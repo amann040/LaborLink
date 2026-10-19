@@ -1,4 +1,4 @@
-const API="http://127.0.0.1:8000/api";
+const API="https://laborlink-api-wbuz.onrender.com/api";
 const fallback=[{id:1,title:"Residential wiring assistance",skill_required:"Electrician",employer:"Sri BuildWorks",area:"Vellore",daily_wage:900,workers_needed:2,work_date:"Tomorrow",description:"Electrical installation assistance.",latitude:12.9165,longitude:79.1325},{id:2,title:"Apartment interior painting",skill_required:"Painter",employer:"Green Homes",area:"Katpadi",daily_wage:750,workers_needed:2,work_date:"Friday",description:"Interior wall painting.",latitude:12.9698,longitude:79.1456}];
 const $=s=>document.querySelector(s),grid=$("#jobsGrid"),empty=$("#empty"),modal=$("#modal"),modalBody=$("#modalBody"),dash=$("#dashboard"),dashBody=$("#dashboardBody");let map,markers,state=JSON.parse(localStorage.getItem("laborlinkSession")||"null");
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
