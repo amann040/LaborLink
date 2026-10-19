@@ -1,0 +1,60 @@
+# LaborLink
+
+LaborLink is a full-stack academic prototype for matching daily-wage workers with nearby employers. It uses FastAPI, SQLite/SQLModel, browser JavaScript, Haversine distance calculations, and Leaflet maps.
+
+## macOS setup
+
+From the project folder:
+
+```zsh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export LABORLINK_SECRET_KEY="replace-with-a-long-random-development-secret"
+uvicorn backend.main:app --reload
+```
+
+Open `http://127.0.0.1:8000/docs` for the API. In a second terminal, serve the frontend rather than opening it as a file (this provides a valid browser origin):
+
+```zsh
+cd frontend
+python3 -m http.server 5500
+```
+
+Then visit `http://127.0.0.1:5500`. The frontend expects the backend at `http://127.0.0.1:8000`.
+
+If port 8000 is busy, identify the process with `lsof -nP -iTCP:8000 -sTCP:LISTEN`, stop the old Uvicorn process, or use `uvicorn backend.main:app --reload --port 8001` and update the `API` constant in `frontend/app.js`.
+
+`laborlink.db` is never deleted by startup. Existing original demo tables receive only additive nullable/defaulted columns; accounts and applications are new tables. Back up the database before any future schema redesign.
+
+## Main API
+
+| Purpose | Endpoint |
+| --- | --- |
+| Health | `GET /api/health` |
+| Register | `POST /api/auth/register/worker`, `POST /api/auth/register/employer` |
+| Login/current/logout | `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout` |
+| Jobs | `GET/POST /api/jobs`, `GET/PUT /api/jobs/{id}` |
+| Worker profile | `GET/PUT /api/worker/profile` |
+| Applications | `POST /api/jobs/{id}/applications`, `GET /api/worker/applications`, `GET /api/jobs/{id}/applicants`, `PATCH /api/applications/{id}` with `{"status":"accepted"}` or `{"status":"rejected"}` |
+| Matching | `GET /api/workers/nearby`, `GET /api/jobs/{id}/matches`, `GET /api/jobs/{id}/fog-matches?radius_km=10&max_expected_wage=900` |
+| Prototype statistics | `GET /api/admin/stats` |
+
+Employer endpoints require an employer JWT; worker profile and application endpoints require a worker JWT. Passwords are Argon2 hashes and are excluded from response schemas. JWT signing uses `LABORLINK_SECRET_KEY`; do not commit a real secret. Configure trusted browser origins with `LABORLINK_CORS_ORIGINS` (comma-separated) when deploying.
+
+## Edge–Fog–Cloud flow
+
+- **Edge (browser):** public job listings are cached in `localStorage`; non-destructive POST/PUT/PATCH requests made while offline are queued and retried on reconnect. The UI reports online/offline state. Leaflet displays only approximate job coordinates.
+- **Fog (`backend/fog_matching.py`):** the employer-only regional service first keeps workers in the job region, then requires availability, location consent, coordinates, compatible skills and the requested radius/wage limits. It calculates Haversine distance locally, ranks the candidates, and returns approximate area only—never worker coordinates. `matching_time_ms` is measured with `perf_counter` for each actual request. It remains a module rather than a separate network service for this prototype.
+- **Cloud (SQLite):** the central database persists accounts, profiles, jobs and applications. `/api/admin/stats` provides basic centralized counts.
+
+Workers must explicitly set `location_consent` before their precise coordinates are used by fog matching. This prototype has no payments, identity verification, rate limiting, refresh-token revocation, audit trail, or production security review; do not use it for real hiring decisions or sensitive location data.
+
+## Tests
+
+```zsh
+source .venv/bin/activate
+python -m unittest discover -s tests -v
+```
+
+The tests create a temporary database and cover health, account registration and duplicate emails, correct/incorrect login, role authorization, job creation/listing, applications, and nearby-worker lookup.
