@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, Field as PydanticField, field_validator
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -99,6 +100,18 @@ class WorkerApplicationResponse(BaseModel):
     created_at: str
 
 
+class PublicWorkerResponse(BaseModel):
+    id: int
+    name: str
+    skill: str
+    experience_years: int
+    daily_wage: int
+    area: str
+    region: str
+    available: bool
+    location_consent: bool
+
+
 class FogMatchResponse(BaseModel):
     worker_id: int
     skill: str
@@ -177,7 +190,13 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=True
 
 
 @app.get("/api/health")
-def health(): return {"status": "ok", "service": "LaborLink API"}
+def health():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"status": "ok", "service": "LaborLink API"}
 
 
 @app.post("/api/auth/register/worker", status_code=201)
@@ -250,9 +269,9 @@ def employer_jobs(account: Account = Depends(require_role("employer")), session:
     return [{**job.model_dump(), "applicant_count": len(session.exec(select(JobApplication).where(JobApplication.job_id == job.id)).all())} for job in jobs]
 
 
-@app.get("/api/workers", response_model=list[Worker])
+@app.get("/api/workers", response_model=list[PublicWorkerResponse])
 def list_workers(skill: Optional[str] = None, area: Optional[str] = None, session: Session = Depends(get_session)):
-    items = session.exec(select(Worker)).all()
+    items = [w for w in session.exec(select(Worker)).all()]
     if skill: items = [w for w in items if skill.lower() in w.skill.lower()]
     if area: items = [w for w in items if area.lower() in w.area.lower()]
     return items
@@ -277,15 +296,15 @@ def worker_profile(account: Account = Depends(require_role("worker")), session: 
     return worker
 
 
-@app.get("/api/workers/nearby")
+@app.get("/api/workers/nearby", response_model=list[PublicWorkerResponse])
 def nearby_workers(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180), radius_km: float = Query(10, gt=0, le=100), skill: Optional[str] = None, session: Session = Depends(get_session)):
     results = []
     for w in session.exec(select(Worker)).all():
-        if not w.available or w.latitude is None or w.longitude is None: continue
+        if not w.available or not w.location_consent or w.latitude is None or w.longitude is None: continue
         if skill and skill.lower() not in w.skill.lower(): continue
         d = haversine_km(lat, lon, w.latitude, w.longitude)
-        if d <= radius_km: results.append({**w.model_dump(), "distance_km": round(d, 2)})
-    return sorted(results, key=lambda x: x["distance_km"])
+        if d <= radius_km: results.append(w)
+    return results
 
 
 @app.post("/api/jobs/{job_id}/applications", status_code=201)

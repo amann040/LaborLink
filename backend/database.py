@@ -1,9 +1,21 @@
 import os
+from pathlib import Path
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlmodel import SQLModel, Session, create_engine
 
-engine = create_engine(os.getenv("LABORLINK_DB_URL", "sqlite:///./laborlink.db"), connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("LABORLINK_DB_URL", "sqlite:///./laborlink.db").strip()
+if not DATABASE_URL:
+    raise RuntimeError("LABORLINK_DB_URL must not be empty")
+
+# SQLite creates the file but not its parent directory. Create only the
+# configured parent; never replace a bad production path with a temporary DB.
+database_url = make_url(DATABASE_URL)
+if database_url.drivername.startswith("sqlite") and database_url.database not in (None, ":memory:"):
+    Path(database_url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 
 def _add_column_if_missing(connection, table: str, column: str, definition: str) -> None:
