@@ -10,9 +10,10 @@ from sqlmodel import Session, select
 from .database import get_session
 from .models import Account
 
-# Configure this through the environment before deployment. A development-only
-# fallback keeps local coursework setup simple and is deliberately not a secret.
-SECRET_KEY = os.getenv("LABORLINK_SECRET_KEY", "development-only-not-for-deployment")
+# The signing key must always be supplied by the runtime environment.
+SECRET_KEY = os.getenv("LABORLINK_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("LABORLINK_SECRET_KEY must be set before starting LaborLink")
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = 60
